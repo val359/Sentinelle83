@@ -1,5 +1,5 @@
 from __future__ import annotations
-import argparse, hashlib, json, math, re, sqlite3, time, unicodedata
+import argparse, hashlib, json, math, re, sqlite3, time, unicodedata, subprocess
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
@@ -53,11 +53,31 @@ def fetch(url):
     headers = {
         "User-Agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 Chrome/149 Safari/537.36",
         "Accept-Language": "fr-FR,fr;q=0.9",
-        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8"
+        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+        "Connection": "close"
     }
-    r = requests.get(url, headers=headers, timeout=25, allow_redirects=True)
-    r.raise_for_status()
-    return r
+
+    last_error = None
+
+    for attempt in range(1, 4):
+        try:
+            r = requests.get(
+                url,
+                headers=headers,
+                timeout=40,
+                allow_redirects=True
+            )
+            r.raise_for_status()
+            return r
+
+        except requests.RequestException as error:
+            last_error = error
+            log(f"Tentative {attempt}/3 échouée pour {url} : {error}")
+
+            if attempt < 3:
+                time.sleep(3)
+
+    raise last_error
 
 def parse_rss(source):
     soup = BeautifulSoup(fetch(source["url"]).content, "xml")
@@ -128,6 +148,29 @@ def send_telegram(config, message):
     r.raise_for_status()
     return True
 
+
+def play_alert_sound():
+    """Joue un son d’alerte sous Linux."""
+    sound_files = [
+        "/usr/share/sounds/freedesktop/stereo/alarm-clock-elapsed.oga",
+        "/usr/share/sounds/freedesktop/stereo/complete.oga",
+        "/usr/share/sounds/freedesktop/stereo/message-new-instant.oga",
+    ]
+
+    for sound_file in sound_files:
+        if Path(sound_file).exists():
+            try:
+                subprocess.Popen(
+                    ["paplay", sound_file],
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL,
+                )
+                return
+            except OSError:
+                pass
+
+    print("\a", end="", flush=True)
+
 def build_message(item, result):
     n = result["nearest"]
     excerpt = re.sub(r"\s+", " ", item.text).strip()
@@ -160,6 +203,7 @@ def run_cycle(config, con, show_existing=False):
             if seen or not result or (first_db and not show_existing):
                 continue
             message = build_message(item, result)
+            play_alert_sound()
             print("\n" + "="*72 + "\n" + message + "\n" + "="*72)
             try:
                 if send_telegram(config, message):
@@ -173,6 +217,7 @@ def test_alert(config):
     item = Item("TEST LOCAL","Départ de feu fictif à Fréjus","Ceci est une alerte de test. Aucun incendie réel.","https://www.var.gouv.fr/")
     result = {"nearest":{"name":"Fréjus","distance_km":0.0},"keywords":["départ de feu"]}
     message = build_message(item, result)
+    play_alert_sound()
     print(message)
     if send_telegram(config, message):
         log("Notification Telegram de test envoyée")
@@ -237,6 +282,72 @@ def show_status(config):
 
     print("=" * 54)
 
+
+def show_telegram_chat_id(config):
+    """Affiche le chat_id Telegram à partir du dernier message reçu."""
+    token = config.get("telegram", {}).get("bot_token", "").strip()
+
+    if not token:
+        print("❌ Aucun jeton Telegram dans config.json.")
+        print("Ajoute d'abord le bot_token puis recommence.")
+        return 1
+
+    try:
+        response = requests.get(
+            f"https://api.telegram.org/bot{token}/getUpdates",
+            timeout=20,
+        )
+        response.raise_for_status()
+        data = response.json()
+    except requests.RequestException as error:
+        print("❌ Impossible de contacter Telegram :", error)
+        return 1
+
+    if not data.get("ok"):
+        print("❌ Telegram a refusé la requête.")
+        print(data)
+        return 1
+
+    updates = data.get("result", [])
+
+    if not updates:
+        print("❌ Aucun message reçu par le bot.")
+        print("Ouvre Telegram, trouve ton bot et envoie-lui un message.")
+        return 1
+
+    for update in reversed(updates):
+        message = (
+            update.get("message")
+            or update.get("channel_post")
+            or update.get("edited_message")
+        )
+
+        if not message:
+            continue
+
+        chat = message.get("chat", {})
+        chat_id = chat.get("id")
+
+        if chat_id is not None:
+            print("=" * 54)
+            print("📲 TELEGRAM")
+            print()
+            print(f"Chat ID : {chat_id}")
+
+            if chat.get("first_name"):
+                print(f"Prénom : {chat['first_name']}")
+
+            if chat.get("username"):
+                print(f"Utilisateur : @{chat['username']}")
+
+            print()
+            print("Copie ce nombre dans config.json, à la ligne chat_id.")
+            print("=" * 54)
+            return 0
+
+    print("❌ Aucun chat_id trouvé dans les messages reçus.")
+    return 1
+
 def main():
     p = argparse.ArgumentParser(description="Sentinelle83")
     p.add_argument("--once", action="store_true")
@@ -244,11 +355,14 @@ def main():
     p.add_argument("--show-existing", action="store_true")
     p.add_argument("--reset", action="store_true")
     p.add_argument("--status", action="store_true", help="Afficher l’état du programme")
+    p.add_argument("--telegram-chat-id", action="store_true", help="Afficher le chat_id Telegram")
     args = p.parse_args()
     config = load_config()
     if args.status:
         show_status(config)
         return 0
+    if args.telegram_chat_id:
+        return show_telegram_chat_id(config)
     if args.reset and DB_PATH.exists():
         DB_PATH.unlink()
     if args.test_alert:
