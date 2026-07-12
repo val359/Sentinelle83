@@ -177,14 +177,78 @@ def test_alert(config):
     if send_telegram(config, message):
         log("Notification Telegram de test envoyée")
 
+
+def show_status(config):
+    """Affiche l'état actuel de Sentinelle83."""
+    print("=" * 54)
+    print("🚒 SENTINELLE83")
+    print()
+    print("Version : 0.1.1")
+    print()
+
+    active_sources = [
+        source for source in config.get("sources", [])
+        if source.get("enabled", True)
+    ]
+
+    print("Sources :")
+    for source in config.get("sources", []):
+        state = "✅ activée" if source.get("enabled", True) else "⏸ désactivée"
+        print(f"  {source['name']} : {state}")
+
+    telegram = config.get("telegram", {})
+    telegram_ready = bool(
+        telegram.get("bot_token", "").strip()
+        and str(telegram.get("chat_id", "")).strip()
+    )
+
+    print()
+    print(f"Telegram : {'✅ configuré' if telegram_ready else '❌ non configuré'}")
+    print(f"Rayon d’alerte : {config.get('alert_radius_km', '?')} km")
+    print(
+        f"Intervalle : "
+        f"{int(config.get('interval_seconds', 300)) // 60} minute(s)"
+    )
+    print(f"Sources actives : {len(active_sources)}")
+
+    if DB_PATH.exists():
+        try:
+            con = sqlite3.connect(DB_PATH)
+            count = con.execute("SELECT COUNT(*) FROM seen").fetchone()[0]
+            con.close()
+            print(f"Éléments mémorisés : {count}")
+        except sqlite3.Error:
+            print("Éléments mémorisés : base illisible")
+    else:
+        print("Éléments mémorisés : 0")
+
+    if LOG_PATH.exists():
+        lines = LOG_PATH.read_text(
+            encoding="utf-8",
+            errors="ignore"
+        ).splitlines()
+
+        if lines:
+            print(f"Dernière activité : {lines[-1]}")
+        else:
+            print("Dernière activité : aucune")
+    else:
+        print("Dernière activité : aucune")
+
+    print("=" * 54)
+
 def main():
     p = argparse.ArgumentParser(description="Sentinelle83")
     p.add_argument("--once", action="store_true")
     p.add_argument("--test-alert", action="store_true")
     p.add_argument("--show-existing", action="store_true")
     p.add_argument("--reset", action="store_true")
+    p.add_argument("--status", action="store_true", help="Afficher l’état du programme")
     args = p.parse_args()
     config = load_config()
+    if args.status:
+        show_status(config)
+        return 0
     if args.reset and DB_PATH.exists():
         DB_PATH.unlink()
     if args.test_alert:
