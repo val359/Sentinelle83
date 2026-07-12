@@ -137,6 +137,17 @@ def analyze(item, config):
         return None
     return {"nearest": nearest, "keywords": fire_hits}
 
+def send_telegram(config, message):
+    token = config["telegram"].get("bot_token","").strip()
+    chat_id = str(config["telegram"].get("chat_id","")).strip()
+    if not token or not chat_id:
+        return False
+    r = requests.post(f"https://api.telegram.org/bot{token}/sendMessage",
+                      json={"chat_id": chat_id, "text": message, "disable_web_page_preview": False},
+                      timeout=20)
+    r.raise_for_status()
+    return True
+
 
 def play_alert_sound():
     """Joue un son d’alerte sous Linux."""
@@ -204,6 +215,7 @@ def test_alert(config):
     play_alert_sound()
     print(message)
     
+
 
 
 def wind_direction_name(degrees):
@@ -337,6 +349,15 @@ def show_status(config):
     for source in config.get("sources", []):
         state = "✅ activée" if source.get("enabled", True) else "⏸ désactivée"
         print(f"  {source['name']} : {state}")
+
+    telegram = config.get("telegram", {})
+    telegram_ready = bool(
+        telegram.get("bot_token", "").strip()
+        and str(telegram.get("chat_id", "")).strip()
+    )
+
+    print()
+    print(f"Telegram : {'✅ configuré' if telegram_ready else '❌ non configuré'}")
     print(f"Rayon d’alerte : {config.get('alert_radius_km', '?')} km")
     print(
         f"Intervalle : "
@@ -371,6 +392,71 @@ def show_status(config):
     print("=" * 54)
 
 
+def show_telegram_chat_id(config):
+    """Affiche le chat_id Telegram à partir du dernier message reçu."""
+    token = config.get("telegram", {}).get("bot_token", "").strip()
+
+    if not token:
+        print("❌ Aucun jeton Telegram dans config.json.")
+        print("Ajoute d'abord le bot_token puis recommence.")
+        return 1
+
+    try:
+        response = requests.get(
+            f"https://api.telegram.org/bot{token}/getUpdates",
+            timeout=20,
+        )
+        response.raise_for_status()
+        data = response.json()
+    except requests.RequestException as error:
+        print("❌ Impossible de contacter Telegram :", error)
+        return 1
+
+    if not data.get("ok"):
+        print("❌ Telegram a refusé la requête.")
+        print(data)
+        return 1
+
+    updates = data.get("result", [])
+
+    if not updates:
+        print("❌ Aucun message reçu par le bot.")
+        print("Ouvre Telegram, trouve ton bot et envoie-lui un message.")
+        return 1
+
+    for update in reversed(updates):
+        message = (
+            update.get("message")
+            or update.get("channel_post")
+            or update.get("edited_message")
+        )
+
+        if not message:
+            continue
+
+        chat = message.get("chat", {})
+        chat_id = chat.get("id")
+
+        if chat_id is not None:
+            print("=" * 54)
+            print("📲 TELEGRAM")
+            print()
+            print(f"Chat ID : {chat_id}")
+
+            if chat.get("first_name"):
+                print(f"Prénom : {chat['first_name']}")
+
+            if chat.get("username"):
+                print(f"Utilisateur : @{chat['username']}")
+
+            print()
+            print("Copie ce nombre dans config.json, à la ligne chat_id.")
+            print("=" * 54)
+            return 0
+
+    print("❌ Aucun chat_id trouvé dans les messages reçus.")
+    return 1
+
 def main():
     p = argparse.ArgumentParser(description="Sentinelle83")
     p.add_argument("--once", action="store_true")
@@ -378,6 +464,7 @@ def main():
     p.add_argument("--show-existing", action="store_true")
     p.add_argument("--reset", action="store_true")
     p.add_argument("--status", action="store_true", help="Afficher l’état du programme")
+    p.add_argument("--telegram-chat-id", action="store_true", help="Afficher le chat_id Telegram")
     p.add_argument("--weather", action="store_true", help="Afficher la météo de Fréjus")
     args = p.parse_args()
     config = load_config()
@@ -386,6 +473,8 @@ def main():
     if args.status:
         show_status(config)
         return 0
+    if args.telegram_chat_id:
+        return show_telegram_chat_id(config)
     if args.reset and DB_PATH.exists():
         DB_PATH.unlink()
     if args.test_alert:

@@ -6,10 +6,6 @@
     "longitude": 6.7356
   },
   "alert_radius_km": 35,
-  "telegram": {
-    "bot_token": "",
-    "chat_id": ""
-  },
   "locations": {
     "Fréjus": [
       43.4332,
@@ -88,10 +84,10 @@
       "enabled": true
     },
     {
-      "name": "Facebook Préfet du Var",
-      "url": "https://www.facebook.com/Prefet83/",
+      "name": "Var Actu",
+      "url": "https://www.varactu.fr/",
       "type": "html",
-      "enabled": false
+      "enabled": true
     }
   ]
 }
