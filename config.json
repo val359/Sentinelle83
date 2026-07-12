@@ -1,0 +1,97 @@
+{
+  "interval_seconds": 300,
+  "reference": {
+    "name": "Fréjus",
+    "latitude": 43.4332,
+    "longitude": 6.7356
+  },
+  "alert_radius_km": 35,
+  "telegram": {
+    "bot_token": "",
+    "chat_id": ""
+  },
+  "locations": {
+    "Fréjus": [
+      43.4332,
+      6.7356
+    ],
+    "Saint-Raphaël": [
+      43.4252,
+      6.7684
+    ],
+    "Boulouris": [
+      43.412,
+      6.819
+    ],
+    "Valescure": [
+      43.447,
+      6.787
+    ],
+    "Agay": [
+      43.431,
+      6.856
+    ],
+    "Anthéor": [
+      43.44,
+      6.889
+    ],
+    "Le Dramont": [
+      43.419,
+      6.846
+    ],
+    "Saint-Aygulf": [
+      43.389,
+      6.722
+    ],
+    "Roquebrune-sur-Argens": [
+      43.443,
+      6.637
+    ],
+    "Puget-sur-Argens": [
+      43.456,
+      6.684
+    ],
+    "Bagnols-en-Forêt": [
+      43.538,
+      6.698
+    ],
+    "Les Adrets-de-l'Estérel": [
+      43.52,
+      6.81
+    ],
+    "Le Muy": [
+      43.473,
+      6.565
+    ],
+    "Sainte-Maxime": [
+      43.309,
+      6.638
+    ]
+  },
+  "sources": [
+    {
+      "name": "Préfecture du Var - Actualités",
+      "url": "https://www.var.gouv.fr/Actualites",
+      "type": "html",
+      "enabled": true
+    },
+    {
+      "name": "Préfecture du Var - Feux",
+      "url": "https://www.var.gouv.fr/tags/view/Accueil+et+dossier/Grands+dossiers/Feux",
+      "type": "html",
+      "enabled": true
+    },
+    {
+      "name": "Google Actualités - Incendies Var",
+      "url": "https://news.google.com/rss/search?q=incendie+Var+Fr%C3%A9jus+OR+Saint-Rapha%C3%ABl+OR+Est%C3%A9rel&hl=fr&gl=FR&ceid=FR%3Afr",
+      "type": "rss",
+      "enabled": true
+    },
+    {
+      "name": "Facebook Préfet du Var",
+      "url": "https://www.facebook.com/Prefet83/",
+      "type": "html",
+      "enabled": false
+    }
+  ]
+}
